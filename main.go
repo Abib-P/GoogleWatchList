@@ -66,6 +66,14 @@ func saveToken(path string, token *oauth2.Token) {
 	json.NewEncoder(f).Encode(token)
 }
 
+func retrieveDocumentIdFromEnvironment() string {
+	docId := os.Getenv("GOOGLE_DOC_ID")
+	if docId == "" {
+		log.Fatal("GOOGLE_DOC_ID environment variable is not set")
+	}
+	return docId
+}
+
 func main() {
 	ctx := context.Background()
 	b, err := os.ReadFile("credentials.json")
@@ -85,9 +93,7 @@ func main() {
 		log.Fatalf("Unable to retrieve Docs client: %v", err)
 	}
 
-	// Prints the title of the requested doc:
-	// https://docs.google.com/document/d/195j9eDD3ccgjQRttHhJPymLJUCOUjs-jmwTrekvdjFE/edit
-	docId := "195j9eDD3ccgjQRttHhJPymLJUCOUjs-jmwTrekvdjFE"
+	docId := retrieveDocumentIdFromEnvironment()
 	doc, err := srv.Documents.Get(docId).Do()
 	if err != nil {
 		log.Fatalf("Unable to retrieve data from document: %v", err)

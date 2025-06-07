@@ -4,14 +4,13 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
-	"log"
-	"net/http"
-	"os"
-
 	"golang.org/x/oauth2"
 	"golang.org/x/oauth2/google"
 	"google.golang.org/api/docs/v1"
 	"google.golang.org/api/option"
+	"log"
+	"net/http"
+	"os"
 )
 
 // Retrieves a token, saves the token, then returns the generated client.
@@ -74,6 +73,23 @@ func retrieveDocumentIdFromEnvironment() string {
 	return docId
 }
 
+func splitLines(text string) []string {
+	lines := make([]string, 0)
+	currentLine := ""
+	for _, char := range text {
+		if char == '\n' {
+			lines = append(lines, currentLine)
+			currentLine = ""
+		} else {
+			currentLine += string(char)
+		}
+	}
+	if currentLine != "" {
+		lines = append(lines, currentLine)
+	}
+	return lines
+}
+
 func main() {
 	ctx := context.Background()
 	b, err := os.ReadFile("credentials.json")
@@ -98,5 +114,41 @@ func main() {
 	if err != nil {
 		log.Fatalf("Unable to retrieve data from document: %v", err)
 	}
-	fmt.Printf("The title of the doc is: %s\n", doc.Title)
+
+	var text string
+	for _, element := range doc.Body.Content {
+		if element.Paragraph != nil {
+			for _, paraElement := range element.Paragraph.Elements {
+				if paraElement.TextRun != nil {
+					text += paraElement.TextRun.Content
+				}
+			}
+		}
+	}
+
+	lines := splitLines(text)
+	for i, line := range lines {
+		if len(line) > 0 && line[0] >= 'a' && line[0] <= 'z' {
+			lines[i] = string(line[0]-32) + line[1:] // Convert first character to uppercase
+		}
+	}
+
+	for i := 0; i < len(lines)-1; i++ {
+		for j := i + 1; j < len(lines); j++ {
+			if lines[i] > lines[j] {
+				lines[i], lines[j] = lines[j], lines[i]
+			}
+		}
+	}
+
+	uniqueLines := make([]string, 0)
+	for i, line := range lines {
+		if i == 0 || line != lines[i-1] {
+			uniqueLines = append(uniqueLines, line)
+		}
+	}
+
+	for _, line := range uniqueLines {
+		fmt.Println(line)
+	}
 }

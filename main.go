@@ -6,11 +6,12 @@ import (
 	"fmt"
 	"golang.org/x/oauth2"
 	"golang.org/x/oauth2/google"
-	"google.golang.org/api/docs/v1"
 	"google.golang.org/api/option"
+	"google.golang.org/api/sheets/v4"
 	"log"
 	"net/http"
 	"os"
+	"strings"
 )
 
 // Retrieves a token, saves the token, then returns the generated client.
@@ -65,12 +66,12 @@ func saveToken(path string, token *oauth2.Token) {
 	json.NewEncoder(f).Encode(token)
 }
 
-func retrieveDocumentIdFromEnvironment() string {
-	docId := os.Getenv("GOOGLE_DOC_ID")
-	if docId == "" {
+func retrieveSheetIdFromEnvironment() string {
+	sheetID := os.Getenv("GOOGLE_SHEET_ID")
+	if sheetID == "" {
 		log.Fatal("GOOGLE_DOC_ID environment variable is not set")
 	}
-	return docId
+	return sheetID
 }
 
 func splitLines(text string) []string {
@@ -98,57 +99,70 @@ func main() {
 	}
 
 	// If modifying these scopes, delete your previously saved token.json.
-	config, err := google.ConfigFromJSON(b, "https://www.googleapis.com/auth/documents.readonly")
+	config, err := google.ConfigFromJSON(b, "https://www.googleapis.com/auth/spreadsheets.readonly")
 	if err != nil {
 		log.Fatalf("Unable to parse client secret file to config: %v", err)
 	}
 	client := getClient(config)
 
-	srv, err := docs.NewService(ctx, option.WithHTTPClient(client))
+	srv, err := sheets.NewService(ctx, option.WithHTTPClient(client))
 	if err != nil {
-		log.Fatalf("Unable to retrieve Docs client: %v", err)
+		log.Fatalf("Unable to retrieve Sheets client: %v", err)
 	}
 
-	docId := retrieveDocumentIdFromEnvironment()
-	doc, err := srv.Documents.Get(docId).Do()
+	sheetID := retrieveSheetIdFromEnvironment()
+	sheetRange := "Movies!A2:Z"
+	resp, err := srv.Spreadsheets.Values.Get(sheetID, sheetRange).Do()
 	if err != nil {
-		log.Fatalf("Unable to retrieve data from document: %v", err)
+		log.Fatalf("Unable to retrieve data from sheet: %v", err)
 	}
 
-	var text string
-	for _, element := range doc.Body.Content {
-		if element.Paragraph != nil {
-			for _, paraElement := range element.Paragraph.Elements {
-				if paraElement.TextRun != nil {
-					text += paraElement.TextRun.Content
+	if len(resp.Values) == 0 {
+		log.Println("No data found.")
+		return
+	}
+
+	uppercaseFirstColumn := make([]string, 0)
+	for i, row := range resp.Values {
+		if len(row) > 0 {
+			if firstCol, ok := row[0].(string); ok {
+				words := strings.Fields(firstCol)
+				for i, word := range words {
+					if len(word) > 0 {
+						// Todo : fix '-' and other special characters
+						words[i] = strings.ToUpper(string(word[0])) + word[1:]
+					}
 				}
+				// Join the words back together
+				uppercaseFirstColumn = append(uppercaseFirstColumn, strings.Join(words, " "))
+				resp.Values[i][0] = uppercaseFirstColumn[i]
 			}
 		}
 	}
 
-	lines := splitLines(text)
-	for i, line := range lines {
-		if len(line) > 0 && line[0] >= 'a' && line[0] <= 'z' {
-			lines[i] = string(line[0]-32) + line[1:] // Convert first character to uppercase
-		}
-	}
+	uniqueRows := make(map[string][]interface{})
+	exitAppIfDuplicatedIsDetected(resp, uniqueRows)
 
-	for i := 0; i < len(lines)-1; i++ {
-		for j := i + 1; j < len(lines); j++ {
-			if lines[i] > lines[j] {
-				lines[i], lines[j] = lines[j], lines[i]
+	//now need to do search in tmdb to find tmdb id for each movie
+
+}
+
+func exitAppIfDuplicatedIsDetected(resp *sheets.ValueRange, uniqueRows map[string][]interface{}) {
+	for _, row := range resp.Values {
+		if len(row) > 0 {
+			rowKey := ""
+			for _, col := range row {
+				if rowKey != "" {
+					rowKey += "|"
+				}
+				rowKey += fmt.Sprintf("%v", col)
+			}
+			if _, exists := uniqueRows[rowKey]; !exists {
+				uniqueRows[rowKey] = row
+			} else {
+				fmt.Printf("Duplicate row found: %v\n", row)
+				os.Exit(1)
 			}
 		}
-	}
-
-	uniqueLines := make([]string, 0)
-	for i, line := range lines {
-		if i == 0 || line != lines[i-1] {
-			uniqueLines = append(uniqueLines, line)
-		}
-	}
-
-	for _, line := range uniqueLines {
-		fmt.Println(line)
 	}
 }

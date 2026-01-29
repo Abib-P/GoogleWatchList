@@ -8,13 +8,13 @@ import (
 	"golang.org/x/oauth2/google"
 	"google.golang.org/api/option"
 	"google.golang.org/api/sheets/v4"
+	"io"
 	"log"
 	"net/http"
 	"os"
 	"strings"
 )
 
-// Retrieves a token, saves the token, then returns the generated client.
 func getClient(config *oauth2.Config) *http.Client {
 	tokFile := "token.json"
 	tok, err := tokenFromFile(tokFile)
@@ -25,7 +25,6 @@ func getClient(config *oauth2.Config) *http.Client {
 	return config.Client(context.Background(), tok)
 }
 
-// Requests a token from the web, then returns the retrieved token.
 func getTokenFromWeb(config *oauth2.Config) *oauth2.Token {
 	authURL := config.AuthCodeURL("state-token", oauth2.AccessTypeOffline)
 	fmt.Printf("Go to the following link in your browser then type the "+
@@ -43,7 +42,6 @@ func getTokenFromWeb(config *oauth2.Config) *oauth2.Token {
 	return tok
 }
 
-// Retrieves a token from a local file.
 func tokenFromFile(file string) (*oauth2.Token, error) {
 	f, err := os.Open(file)
 	defer f.Close()
@@ -55,7 +53,6 @@ func tokenFromFile(file string) (*oauth2.Token, error) {
 	return tok, err
 }
 
-// Saves a token to a file path.
 func saveToken(path string, token *oauth2.Token) {
 	fmt.Printf("Saving credential file to: %s\n", path)
 	f, err := os.OpenFile(path, os.O_RDWR|os.O_CREATE|os.O_TRUNC, 0600)
@@ -74,21 +71,72 @@ func retrieveSheetIdFromEnvironment() string {
 	return sheetID
 }
 
-func splitLines(text string) []string {
-	lines := make([]string, 0)
-	currentLine := ""
-	for _, char := range text {
-		if char == '\n' {
-			lines = append(lines, currentLine)
-			currentLine = ""
-		} else {
-			currentLine += string(char)
+func exitAppIfDuplicatedIsDetected(resp *sheets.ValueRange, uniqueRows map[string][]interface{}) {
+	for _, row := range resp.Values {
+		if len(row) > 0 {
+			rowKey := ""
+			for _, col := range row {
+				if rowKey != "" {
+					rowKey += "|"
+				}
+				rowKey += fmt.Sprintf("%v", col)
+			}
+			if _, exists := uniqueRows[rowKey]; !exists {
+				uniqueRows[rowKey] = row
+			} else {
+				fmt.Printf("Duplicate row found: %v\n", row)
+				os.Exit(1)
+			}
 		}
 	}
-	if currentLine != "" {
-		lines = append(lines, currentLine)
+}
+
+func retrieveTmdbApiKeyFromEnvironment() string {
+	tmdbApiKey := os.Getenv("TMDB_API_KEY")
+	if tmdbApiKey == "" {
+		log.Fatal("TMDB_API_KEY environment variable is not set")
 	}
-	return lines
+	return tmdbApiKey
+}
+
+func searchTmdbMovie(tmdbApiKey string, query string, year []string, language []string) {
+	url := fmt.Sprintf("https://api.themoviedb.org/3/search/movie?query=%s", query)
+	if len(language) > 0 {
+		url += fmt.Sprintf("&language=%s", language[0])
+	}
+	if len(year) > 0 {
+		url += fmt.Sprintf("&year=%s", year[0])
+	}
+
+	req, _ := http.NewRequest("GET", url, nil)
+
+	req.Header.Add("accept", "application/json")
+	req.Header.Add("Authorization", "Bearer "+tmdbApiKey)
+
+	res, _ := http.DefaultClient.Do(req)
+
+	defer res.Body.Close()
+	body, _ := io.ReadAll(res.Body)
+
+	//if only 1 result, print it
+	var result map[string]interface{}
+	if err := json.Unmarshal(body, &result); err != nil {
+		log.Fatalf("Error unmarshalling TMDB response: %v", err)
+	}
+	if results, ok := result["results"].([]interface{}); ok {
+		if len(results) == 1 {
+			if movie, ok := results[0].(map[string]interface{}); ok {
+				fmt.Printf("Found TMDB ID %v for title %s\n", movie["id"], query)
+				return
+			}
+		} else if len(results) > 1 {
+			// trouver une methode pour choisir le bon film parmi les multiples résultats
+		} else {
+			fmt.Printf("No results found for title %s\n", query)
+		}
+	} else {
+		log.Fatalf("Unexpected TMDB response format")
+	}
 }
 
 func main() {
@@ -122,47 +170,18 @@ func main() {
 		return
 	}
 
-	uppercaseFirstColumn := make([]string, 0)
-	for i, row := range resp.Values {
-		if len(row) > 0 {
-			if firstCol, ok := row[0].(string); ok {
-				words := strings.Fields(firstCol)
-				for i, word := range words {
-					if len(word) > 0 {
-						// Todo : fix '-' and other special characters
-						words[i] = strings.ToUpper(string(word[0])) + word[1:]
-					}
-				}
-				// Join the words back together
-				uppercaseFirstColumn = append(uppercaseFirstColumn, strings.Join(words, " "))
-				resp.Values[i][0] = uppercaseFirstColumn[i]
-			}
-		}
-	}
-
 	uniqueRows := make(map[string][]interface{})
 	exitAppIfDuplicatedIsDetected(resp, uniqueRows)
 
 	//now need to do search in tmdb to find tmdb id for each movie
-
-}
-
-func exitAppIfDuplicatedIsDetected(resp *sheets.ValueRange, uniqueRows map[string][]interface{}) {
-	for _, row := range resp.Values {
-		if len(row) > 0 {
-			rowKey := ""
-			for _, col := range row {
-				if rowKey != "" {
-					rowKey += "|"
-				}
-				rowKey += fmt.Sprintf("%v", col)
-			}
-			if _, exists := uniqueRows[rowKey]; !exists {
-				uniqueRows[rowKey] = row
-			} else {
-				fmt.Printf("Duplicate row found: %v\n", row)
-				os.Exit(1)
-			}
+	tmdbApiKey := retrieveTmdbApiKeyFromEnvironment()
+	for _, column := range resp.Values {
+		if len(column) == 0 {
+			continue
 		}
+		titleStr := fmt.Sprintf("%v", column[0])
+		title := strings.TrimSpace(titleStr)
+		println("Searching TMDB for title: " + title + " | year " + fmt.Sprintf("%v", column[2]))
+		searchTmdbMovie(tmdbApiKey, title, []string{fmt.Sprintf("%v", column[2])}, []string{"en-US"})
 	}
 }

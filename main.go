@@ -4,15 +4,16 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
-	"golang.org/x/oauth2"
-	"golang.org/x/oauth2/google"
-	"google.golang.org/api/option"
-	"google.golang.org/api/sheets/v4"
 	"io"
 	"log"
 	"net/http"
 	"os"
 	"strings"
+
+	"golang.org/x/oauth2"
+	"golang.org/x/oauth2/google"
+	"google.golang.org/api/option"
+	"google.golang.org/api/sheets/v4"
 )
 
 func getClient(config *oauth2.Config) *http.Client {
@@ -118,7 +119,6 @@ func searchTmdbMovie(tmdbApiKey string, query string, year []string, language []
 	defer res.Body.Close()
 	body, _ := io.ReadAll(res.Body)
 
-	//if only 1 result, print it
 	var result map[string]interface{}
 	if err := json.Unmarshal(body, &result); err != nil {
 		log.Fatalf("Error unmarshalling TMDB response: %v", err)
@@ -126,13 +126,21 @@ func searchTmdbMovie(tmdbApiKey string, query string, year []string, language []
 	if results, ok := result["results"].([]interface{}); ok {
 		if len(results) == 1 {
 			if movie, ok := results[0].(map[string]interface{}); ok {
-				fmt.Printf("Found TMDB ID %v for title %s\n", movie["id"], query)
+				//fmt.Printf("Found TMDB ID %v for title %s\n", movie["id"], query)
+				fmt.Printf("%v\n", movie["id"])
 				return
 			}
 		} else if len(results) > 1 {
-			// trouver une methode pour choisir le bon film parmi les multiples résultats
+			/*fmt.Printf("Multiple results found for title %s:\n", query)
+			for _, r := range results {
+				if movie, ok := r.(map[string]interface{}); ok {
+					fmt.Printf(" - TMDB ID %v: %s (%s)\n", movie["id"], movie["title"], movie["release_date"])
+				}
+			}*/
+			fmt.Printf("\n")
 		} else {
-			fmt.Printf("No results found for title %s\n", query)
+			//fmt.Printf("No results found for title %s\n", query)
+			fmt.Printf("\n")
 		}
 	} else {
 		log.Fatalf("Unexpected TMDB response format")
@@ -173,7 +181,6 @@ func main() {
 	uniqueRows := make(map[string][]interface{})
 	exitAppIfDuplicatedIsDetected(resp, uniqueRows)
 
-	//now need to do search in tmdb to find tmdb id for each movie
 	tmdbApiKey := retrieveTmdbApiKeyFromEnvironment()
 	for _, column := range resp.Values {
 		if len(column) == 0 {
@@ -181,7 +188,12 @@ func main() {
 		}
 		titleStr := fmt.Sprintf("%v", column[0])
 		title := strings.TrimSpace(titleStr)
-		println("Searching TMDB for title: " + title + " | year " + fmt.Sprintf("%v", column[2]))
-		searchTmdbMovie(tmdbApiKey, title, []string{fmt.Sprintf("%v", column[2])}, []string{"en-US"})
+		//println("Searching TMDB for title: " + title + " | year " + fmt.Sprintf("%v", column[1]))
+		searchTmdbMovie(tmdbApiKey, title, []string{fmt.Sprintf("%v", column[1])}, []string{"en-US"})
+		//verifier qu'il n'y a que des films dans la list et non des series
+		//verif pas de doublons dans les imdb id
+		//verifier le nom nom exact du film par rapport a tmdb
+		//verif que l'annee de sortie est la meme que sur tmdb
+		//verif que tout les films ont un rating tmdb pour verif si ils sont legit
 	}
 }

@@ -248,7 +248,6 @@ func main() {
 			title = strings.ToLower(title)
 			if tmdbTitle != "" && tmdbTitle != title {
 				fmt.Printf("Title mismatch for TMDB ID %s: expected '%s', got '%s'\n", tmdbID, title, tmdbTitle)
-				os.Exit(1)
 			}
 		}
 	}

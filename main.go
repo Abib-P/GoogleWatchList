@@ -8,6 +8,7 @@ import (
 	"log"
 	"net/http"
 	"os"
+	"strings"
 
 	"golang.org/x/oauth2"
 	"golang.org/x/oauth2/google"
@@ -146,6 +147,28 @@ func searchTmdbMovie(tmdbApiKey string, query string, year []string, language []
 	}
 }
 
+func searchTmdbMovieByTmdbID(tmdbApiKey string, tmdbID string) string {
+	url := fmt.Sprintf("https://api.themoviedb.org/3/movie/%s", tmdbID)
+
+	req, _ := http.NewRequest("GET", url, nil)
+
+	req.Header.Add("accept", "application/json")
+	req.Header.Add("Authorization", "Bearer "+tmdbApiKey)
+
+	res, _ := http.DefaultClient.Do(req)
+
+	defer res.Body.Close()
+	body, _ := io.ReadAll(res.Body)
+	var result map[string]interface{}
+	if err := json.Unmarshal(body, &result); err != nil {
+		log.Fatalf("Error unmarshalling TMDB response: %v", err)
+	}
+	if title, ok := result["title"].(string); ok {
+		return title
+	}
+	return ""
+}
+
 func main() {
 	ctx := context.Background()
 	b, err := os.ReadFile("credentials.json")
@@ -177,8 +200,8 @@ func main() {
 		return
 	}
 
-	uniqueRows := make(map[string][]interface{})
-	exitAppIfDuplicatedIsDetected(resp, uniqueRows)
+	//uniqueRows := make(map[string][]interface{})
+	//exitAppIfDuplicatedIsDetected(resp, uniqueRows)
 
 	/*tmdbApiKey := retrieveTmdbApiKeyFromEnvironment()
 	for _, column := range resp.Values {
@@ -189,12 +212,10 @@ func main() {
 		title := strings.TrimSpace(titleStr)
 		//println("Searching TMDB for title: " + title + " | year " + fmt.Sprintf("%v", column[1]))
 		searchTmdbMovie(tmdbApiKey, title, []string{fmt.Sprintf("%v", column[1])}, []string{"en-US"})
-		//verifier le nom exact du film par rapport a tmdb
-		//verif que l'annee de sortie est la meme que sur tmdb
 	}*/
 
 	//verif pas de doublons dans les imdb id
-	for _, column := range resp.Values {
+	/*for _, column := range resp.Values {
 		if len(column) < 3 {
 			continue
 		}
@@ -207,6 +228,31 @@ func main() {
 				os.Exit(1)
 			}
 		}
+	}*/
+	//verifier le nom exact du film par rapport a tmdb
+	for _, column := range resp.Values {
+		if len(column) == 0 {
+			continue
+		}
+		titleStr := fmt.Sprintf("%v", column[0])
+		title := strings.TrimSpace(titleStr)
+		tmdbID := ""
+		if len(column) >= 3 {
+			tmdbID = fmt.Sprintf("%v", column[2])
+		}
+		if tmdbID != "" && tmdbID != "N/A" {
+			tmdbApiKey := retrieveTmdbApiKeyFromEnvironment()
+			tmdbTitle := searchTmdbMovieByTmdbID(tmdbApiKey, tmdbID)
+			//put each title in lower case
+			tmdbTitle = strings.ToLower(tmdbTitle)
+			title = strings.ToLower(title)
+			if tmdbTitle != "" && tmdbTitle != title {
+				fmt.Printf("Title mismatch for TMDB ID %s: expected '%s', got '%s'\n", tmdbID, title, tmdbTitle)
+				os.Exit(1)
+			}
+		}
 	}
+
+	//verifier l'année de sortie du film par rapport a tmdb
 
 }

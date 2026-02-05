@@ -8,7 +8,6 @@ import (
 	"log"
 	"net/http"
 	"os"
-	"strings"
 
 	"golang.org/x/oauth2"
 	"golang.org/x/oauth2/google"
@@ -181,7 +180,7 @@ func main() {
 	uniqueRows := make(map[string][]interface{})
 	exitAppIfDuplicatedIsDetected(resp, uniqueRows)
 
-	tmdbApiKey := retrieveTmdbApiKeyFromEnvironment()
+	/*tmdbApiKey := retrieveTmdbApiKeyFromEnvironment()
 	for _, column := range resp.Values {
 		if len(column) == 0 {
 			continue
@@ -190,10 +189,24 @@ func main() {
 		title := strings.TrimSpace(titleStr)
 		//println("Searching TMDB for title: " + title + " | year " + fmt.Sprintf("%v", column[1]))
 		searchTmdbMovie(tmdbApiKey, title, []string{fmt.Sprintf("%v", column[1])}, []string{"en-US"})
-		//verifier qu'il n'y a que des films dans la list et non des series
-		//verif pas de doublons dans les imdb id
-		//verifier le nom nom exact du film par rapport a tmdb
+		//verifier le nom exact du film par rapport a tmdb
 		//verif que l'annee de sortie est la meme que sur tmdb
-		//verif que tout les films ont un rating tmdb pour verif si ils sont legit
+	}*/
+
+	//verif pas de doublons dans les imdb id
+	for _, column := range resp.Values {
+		if len(column) < 3 {
+			continue
+		}
+		imdbID := fmt.Sprintf("%v", column[2])
+		if imdbID != "" && imdbID != "N/A" {
+			if _, exists := uniqueRows[imdbID]; !exists {
+				uniqueRows[imdbID] = column
+			} else {
+				fmt.Printf("Duplicate IMDb ID found: %s\n", imdbID)
+				os.Exit(1)
+			}
+		}
 	}
+
 }

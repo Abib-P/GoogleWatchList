@@ -126,21 +126,19 @@ func searchTmdbMovie(tmdbApiKey string, query string, year []string, language []
 	if results, ok := result["results"].([]interface{}); ok {
 		if len(results) == 1 {
 			if movie, ok := results[0].(map[string]interface{}); ok {
-				//fmt.Printf("Found TMDB ID %v for title %s\n", movie["id"], query)
-				fmt.Printf("%v\n", movie["id"])
+				fmt.Printf("Found TMDB ID %v for title %s\n", movie["id"], query)
 				return
 			}
 		} else if len(results) > 1 {
-			/*fmt.Printf("Multiple results found for title %s:\n", query)
+			fmt.Printf("Multiple results found for title %s:\n", query)
 			for _, r := range results {
 				if movie, ok := r.(map[string]interface{}); ok {
 					fmt.Printf(" - TMDB ID %v: %s (%s)\n", movie["id"], movie["title"], movie["release_date"])
 				}
-			}*/
+			}
 			fmt.Printf("\n")
 		} else {
-			//fmt.Printf("No results found for title %s\n", query)
-			fmt.Printf("\n")
+			fmt.Printf("No results found for title %s\n", query)
 		}
 	} else {
 		log.Fatalf("Unexpected TMDB response format")
@@ -200,10 +198,10 @@ func main() {
 		return
 	}
 
-	//uniqueRows := make(map[string][]interface{})
-	//exitAppIfDuplicatedIsDetected(resp, uniqueRows)
+	uniqueRows := make(map[string][]interface{})
+	exitAppIfDuplicatedIsDetected(resp, uniqueRows)
 
-	/*tmdbApiKey := retrieveTmdbApiKeyFromEnvironment()
+	tmdbApiKey := retrieveTmdbApiKeyFromEnvironment()
 	for _, column := range resp.Values {
 		if len(column) == 0 {
 			continue
@@ -212,10 +210,9 @@ func main() {
 		title := strings.TrimSpace(titleStr)
 		//println("Searching TMDB for title: " + title + " | year " + fmt.Sprintf("%v", column[1]))
 		searchTmdbMovie(tmdbApiKey, title, []string{fmt.Sprintf("%v", column[1])}, []string{"en-US"})
-	}*/
+	}
 
-	//verif pas de doublons dans les imdb id
-	/*for _, column := range resp.Values {
+	for _, column := range resp.Values {
 		if len(column) < 3 {
 			continue
 		}
@@ -228,8 +225,7 @@ func main() {
 				os.Exit(1)
 			}
 		}
-	}*/
-	//verifier le nom exact du film par rapport a tmdb
+	}
 	for _, column := range resp.Values {
 		if len(column) == 0 {
 			continue
@@ -243,7 +239,6 @@ func main() {
 		if tmdbID != "" && tmdbID != "N/A" {
 			tmdbApiKey := retrieveTmdbApiKeyFromEnvironment()
 			tmdbTitle := searchTmdbMovieByTmdbID(tmdbApiKey, tmdbID)
-			//put each title in lower case
 			tmdbTitle = strings.ToLower(tmdbTitle)
 			title = strings.ToLower(title)
 			if tmdbTitle != "" && tmdbTitle != title {
@@ -251,7 +246,5 @@ func main() {
 			}
 		}
 	}
-
-	//verifier l'année de sortie du film par rapport a tmdb
 
 }
